@@ -1,0 +1,85 @@
+!pip install ipycanvas ipywidgets --quiet
+from IPython.display import display
+from google.colab import output
+from ipycanvas import Canvas
+import cv2, os, numpy as np
+
+# --- Activare widget manager ---
+output.enable_custom_widget_manager()
+
+# --- Încarcă imaginea ---
+img_path = '/content/sample_data/cropped_ROI_rotated.jpg'
+if not os.path.exists(img_path):
+    raise FileNotFoundError(f"Fișierul nu există: {img_path}")
+
+img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+if img is None:
+    raise ValueError(f"Eroare la citirea imaginii: {img_path}")
+
+# --- Redimensionare pentru canvas ---
+h, w = img.shape
+scale = 1
+if max(h, w) > 512:
+    scale = 512 / max(h, w)
+new_w, new_h = int(w * scale), int(h * scale)
+img_small = cv2.resize(img, (new_w, new_h))
+img_rgb = cv2.cvtColor(img_small, cv2.COLOR_GRAY2RGB)
+
+# --- Creează și afișează canvas ---
+canvas = Canvas(width=new_w, height=new_h)
+display(canvas)
+canvas.put_image_data(img_rgb, 0, 0)
+
+# --- Variabile globale ---
+rectangles = []
+start = None
+mouse_x, mouse_y = 0, 0
+
+def redraw():
+    """Redesenare completă a imaginii + dreptunghiuri"""
+    canvas.clear()
+    canvas.put_image_data(img_rgb, 0, 0)
+    canvas.stroke_style = 'red'
+    canvas.line_width = 2
+    for (x1, y1), (x2, y2) in rectangles:
+        canvas.stroke_rect(x1, y1, x2 - x1, y2 - y1)
+    if start is not None:
+        x1, y1 = start
+        canvas.stroke_rect(x1, y1, mouse_x - x1, mouse_y - y1)
+
+def handle_mouse_down(x, y):
+    global start
+    start = (x, y)
+
+def handle_mouse_up(x, y):
+    global start, rectangles
+    if start is not None:
+        x1, y1 = start
+        x2, y2 = x, y
+        x1, x2 = sorted([x1, x2])
+        y1, y2 = sorted([y1, y2])
+        rectangles.append(((x1, y1), (x2, y2)))
+        start = None
+        redraw()
+
+def handle_mouse_move(x, y):
+    global mouse_x, mouse_y
+    mouse_x, mouse_y = x, y
+    if start is not None:
+        redraw()
+
+# --- Legăm evenimente ---
+canvas.on_mouse_down(handle_mouse_down)
+canvas.on_mouse_up(handle_mouse_up)
+canvas.on_mouse_move(handle_mouse_move)
+
+# --- Funcție de salvare ---
+def save_selected_rects(output_dir="/content/sample_data/selected_rects"):
+    os.makedirs(output_dir, exist_ok=True)
+    for i, ((x1, y1), (x2, y2)) in enumerate(rectangles, 1):
+        xs, xe = int(x1 * w / new_w), int(x2 * w / new_w)
+        ys, ye = int(y1 * h / new_h), int(y2 * h / new_h)
+        rect = img[ys:ye, xs:xe]
+        if rect.size > 0:
+            cv2.imwrite(f"{output_dir}/rect_{i}.png", rect)
+    print(f"✅ Salvate {len(rectangles)} pătrate în {output_dir}")

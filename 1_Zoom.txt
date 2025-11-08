@@ -1,0 +1,40 @@
+!pip install segmentation-models --quiet
+!pip install tensorflow --quiet
+!pip install -U segmentation-models-pytorch
+!pip install ipycanvas
+!pip -q install opencv-python-headless scikit-image git+https://github.com/facebookresearch/segment-anything.git
+
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import ipywidgets as widgets
+from IPython.display import display
+
+# Încarcă imaginea grayscale
+image_path = '/content/sample_data/Image.bmp'
+img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+img = np.array(img, dtype=np.uint8)
+H, W = img.shape
+
+# Creează slider-e pentru coordonatele colțului stânga-sus și dimensiunea pătratului
+x_slider = widgets.IntSlider(min=0, max=W-1, value=0, description='X')
+y_slider = widgets.IntSlider(min=0, max=H-1, value=0, description='Y')
+size_slider = widgets.IntSlider(min=1, max=min(H,W), value=100, description='Latura')
+
+def update_roi(x, y, size):
+    x, y, size = int(x), int(y), int(size)
+    # asigură că nu depășește dimensiunea imaginii
+    if x + size > W:
+        x = W - size
+    if y + size > H:
+        y = H - size
+    cropped = img[y:y+size, x:x+size]
+
+    plt.figure(figsize=(5,5))
+    plt.imshow(cropped, cmap='gray')
+    plt.title(f"ROI pătrat (latura={size}px)")
+    plt.axis('off')
+    plt.show()
+
+widgets.interact(update_roi, x=x_slider, y=y_slider, size=size_slider)

@@ -1,0 +1,27 @@
+import cv2
+import numpy as np
+from IPython.display import Image, display
+
+# --- Crop de bază ---
+cropped = img[
+    y_slider.value:y_slider.value + size_slider.value,
+    x_slider.value:x_slider.value + size_slider.value
+]
+
+# --- Rotație ---
+angle = -7.0  # între -30 și 30 grade
+(h, w) = cropped.shape[:2]
+center = (w / 2, h / 2)
+M = cv2.getRotationMatrix2D(center, angle, 1.0)
+rotated = cv2.warpAffine(
+    cropped, M, (w, h),
+    flags=cv2.INTER_LINEAR,
+    borderMode=cv2.BORDER_REFLECT_101
+)
+
+# --- Salvare și afișare ---
+out_path = '/content/sample_data/cropped_ROI_rotated.jpg'
+cv2.imwrite(out_path, rotated)
+print(f"ROI rotit cu {angle}° salvat ca '{out_path}'")
+# --- Vizualizare ---
+display(Image(filename=out_path))

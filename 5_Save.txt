@@ -1,0 +1,56 @@
+import matplotlib.pyplot as plt
+from math import ceil
+
+def save_and_preview_selected_rects(output_dir="/content/sample_data/selected_rects", cols=4, show_ids=True):
+    """
+    Salvează toate ROI-urile desenate și afișează o galerie.
+    - output_dir: directorul unde se salvează PNG-urile
+    - cols: număr de coloane în grilă
+    - show_ids: afișează indicele pe titlul fiecărui ROI
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    crops = []
+    meta = []  # (idx, (xs, ys, xe, ye), shape)
+
+    if not rectangles:
+        print("Nimic de salvat. Desenează cel puțin un dreptunghi.")
+        return
+
+    # salvează fiecare ROI cu maparea corectă la rezoluția originală
+    for i, ((x1, y1), (x2, y2)) in enumerate(rectangles, start=1):
+        xs = int(x1 * w / new_w)
+        xe = int(x2 * w / new_w)
+        ys = int(y1 * h / new_h)
+        ye = int(y2 * h / new_h)
+
+        # protecție pentru limites și cazuri degenerate
+        xs, xe = max(0, min(xs, w-1)), max(1, min(xe, w))
+        ys, ye = max(0, min(ys, h-1)), max(1, min(ye, h))
+        if xe <= xs or ye <= ys:
+            continue
+
+        rect = img[ys:ye, xs:xe]
+        out_path = f"{output_dir}/rect_{i}.png"
+        cv2.imwrite(out_path, rect)
+        crops.append(rect)
+        meta.append((i, (xs, ys, xe, ye), rect.shape))
+
+    print(f"Salvate {len(crops)} ROI-uri în {output_dir}")
+
+    # galerie simplă
+    rows = ceil(len(crops) / cols)
+    plt.figure(figsize=(cols*3, rows*3))
+    for idx, crop in enumerate(crops, start=1):
+        ax = plt.subplot(rows, cols, idx)
+        ax.imshow(crop, cmap='gray')
+        i, (xs, ys, xe, ye), shp = meta[idx-1]
+        title = f"#{i}  {shp[1]}x{shp[0]}"
+        if show_ids:
+            title += f"  [{xs}:{xe}, {ys}:{ye}]"
+        ax.set_title(title, fontsize=9)
+        ax.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+# apel:
+save_and_preview_selected_rects("/content/sample_data/selected_rects", cols=4, show_ids=True)

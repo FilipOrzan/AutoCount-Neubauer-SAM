@@ -1,0 +1,4 @@
+cropped = img[y_slider.value:y_slider.value+size_slider.value,
+              x_slider.value:x_slider.value+size_slider.value]
+cv2.imwrite('/content/sample_data/cropped_ROI.jpg', cropped)
+print("ROI pătrat salvat ca 'cropped_ROI.jpg'")

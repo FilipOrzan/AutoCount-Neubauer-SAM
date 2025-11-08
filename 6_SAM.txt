@@ -1,0 +1,89 @@
+# ======================
+# Zero-shot: numărare discuri cu SAM (fără antrenare)
+# ======================
+
+
+import os, torch, numpy as np, cv2, matplotlib.pyplot as plt
+from PIL import Image
+from skimage.measure import label, regionprops
+from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+
+# --- setări ---
+IMG_PATH = "/content/sample_data/selected_rects/rect_1.png"  # schimbă dacă e nevoie
+SAM_CKPT_URL = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+SAM_CHECKPOINT = "/content/sample_data/sam_vit_h_4b8939.pth"
+
+# praguri formă
+MIN_AREA = 9            # pixeli minimi
+CIRC_MIN = 0.10          # 4πA/P^2 minim
+ECC_MAX  = 0.85          # excentricitate maximă
+
+# --- download checkpoint dacă lipsește ---
+if not os.path.exists(SAM_CHECKPOINT):
+    import urllib.request
+    urllib.request.urlretrieve(SAM_CKPT_URL, SAM_CHECKPOINT)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# --- încarcă SAM ---
+sam = sam_model_registry["vit_h"](checkpoint=SAM_CHECKPOINT).to(device).eval()
+mask_generator = SamAutomaticMaskGenerator(
+    sam,
+    points_per_side=12,
+    points_per_batch=64,
+    pred_iou_thresh=0.90,
+    stability_score_thresh=0.94,
+    min_mask_region_area=MIN_AREA
+)
+
+# --- imagine grayscale -> RGB pentru SAM ---
+img_gray = Image.open(IMG_PATH).convert("L")
+img_np = np.array(img_gray)
+img_rgb = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
+
+# --- generează măști ---
+masks = mask_generator.generate(img_rgb)  # list[dict], fiecare cu 'segmentation' binar
+
+def circularity(area, perimeter):
+    if perimeter == 0:
+        return 0.0
+    return 4.0 * np.pi * area / (perimeter**2)
+def eccentricity_from_contour(cnt):
+    if len(cnt) < 5: return 1.0
+    (_, _),(MA, ma),_ = cv2.fitEllipse(cnt); a,b = max(MA,ma)/2.0, min(MA,ma)/2.0
+    return float(np.sqrt(max(0.0, 1.0 - (b*b)/(a*a))))
+keep = []
+for m in masks:
+    seg = m["segmentation"].astype(np.uint8)
+    if m.get("area", seg.sum()) < MIN_AREA:
+        continue
+    # perimetru prin contur
+    cnts, _ = cv2.findContours(seg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        continue
+    cnt = max(cnts, key=cv2.contourArea)
+    area = float(cv2.contourArea(cnt))
+    per  = float(cv2.arcLength(cnt, True))
+    circ = circularity(area, per)
+
+    # excentricitate via regionprops
+    lbl = label(seg)
+    props = regionprops(lbl)
+    ecc  = eccentricity_from_contour(cnt)
+
+    if circ >= CIRC_MIN and ecc <= ECC_MAX:
+        keep.append((seg, cnt, area, per, circ, ecc))
+
+num_discs = len(keep)-1
+print("Sfere detectate:", num_discs)
+
+# --- overlay rezultate ---
+overlay = cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
+for seg, cnt, *_ in keep:
+    cv2.drawContours(overlay, [cnt], -1, (0,255,0), 1)
+
+plt.figure(figsize=(6,6))
+plt.imshow(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB))
+plt.title(f"Sfere detectate: {num_discs}")
+plt.axis("off")
+plt.show()
